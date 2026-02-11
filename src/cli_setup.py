@@ -148,6 +148,11 @@ async def setup_telegram_session(setup_config: SetupConfig) -> tuple[Path, str |
         setup_config.api_id,
         setup_config.api_hash,
         entity_cache_limit=setup_config.entity_cache_limit,
+        device_model=setup_config.device_model or None,
+        system_version=setup_config.system_version or None,
+        app_version=setup_config.app_version or None,
+        lang_code=setup_config.lang_code or None,
+        system_lang_code=setup_config.system_lang_code or None,
     )
 
     try:

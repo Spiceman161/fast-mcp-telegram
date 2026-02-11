@@ -98,11 +98,17 @@ async def _get_client_by_token(token: str) -> TelegramClient:
         session_path = SESSION_DIR / f"{token}.session"
 
         try:
+            cfg = get_config()
             client = TelegramClient(
                 session_path,
                 API_ID,
                 API_HASH,
-                entity_cache_limit=get_config().entity_cache_limit,
+                entity_cache_limit=cfg.entity_cache_limit,
+                device_model=cfg.device_model or None,
+                system_version=cfg.system_version or None,
+                app_version=cfg.app_version or None,
+                lang_code=cfg.lang_code or None,
+                system_lang_code=cfg.system_lang_code or None,
             )
             await client.connect()
 

@@ -105,6 +105,37 @@ class ServerConfig(BaseSettings):
         description="Phone number for Telegram authentication (include country code)",
     )
 
+    # Client fingerprint (optional but recommended for stable identity)
+    device_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("device_model", "TG_DEVICE_MODEL"),
+        description="Telegram client device model (optional; e.g., 'Telegram Desktop')",
+    )
+
+    system_version: str = Field(
+        default="",
+        validation_alias=AliasChoices("system_version", "TG_SYSTEM_VERSION"),
+        description="Telegram client system version (optional; e.g., 'Linux 6.8.0-90-generic')",
+    )
+
+    app_version: str = Field(
+        default="",
+        validation_alias=AliasChoices("app_version", "TG_APP_VERSION"),
+        description="Telegram client app version (optional; e.g., '6.4.2 x86_64')",
+    )
+
+    lang_code: str = Field(
+        default="",
+        validation_alias=AliasChoices("lang_code", "TG_LANG_CODE"),
+        description="Telegram client language code (optional; e.g., 'ru')",
+    )
+
+    system_lang_code: str = Field(
+        default="",
+        validation_alias=AliasChoices("system_lang_code", "TG_SYSTEM_LANG_CODE"),
+        description="Telegram client system language code (optional; e.g., 'ru-RU')",
+    )
+
     # Web setup configuration
     domain: str = Field(
         default="your-domain.com",
