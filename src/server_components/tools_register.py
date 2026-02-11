@@ -8,6 +8,7 @@ from src.server_components import bot_restrictions
 from src.server_components import errors as server_errors
 from src.tools.contacts import find_chats_impl, get_chat_info_impl
 from src.tools.messages import (
+    download_message_media_impl,
     edit_message_impl,
     read_messages_by_ids,
     send_message_impl,
@@ -250,6 +251,32 @@ def register_tools(mcp: FastMCP) -> None:
             message_ids: List of message IDs to retrieve (from search results)
         """
         return await read_messages_by_ids(chat_id, message_ids)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            idempotentHint=True,
+            openWorldHint=True,
+        )
+    )
+    @mcp_tool_with_restrictions("download_message_media")
+    async def download_message_media(
+        chat_id: str,
+        message_id: int,
+        output_dir: str | None = None,
+    ) -> dict:
+        """Download media from a message to a local file.
+
+        Args:
+            chat_id: Target chat ID (username, numeric id, -100... channel id, or 'me')
+            message_id: Message ID within the chat
+            output_dir: Optional output directory. If omitted, defaults to
+                ~/.config/fast-mcp-telegram/downloads/
+        """
+        return await download_message_media_impl(
+            chat_id=chat_id,
+            message_id=message_id,
+            output_dir=output_dir,
+        )
 
     @mcp.tool(
         annotations=ToolAnnotations(

@@ -1,6 +1,7 @@
 import ipaddress
 import logging
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -681,6 +682,138 @@ async def read_messages_by_ids(
             exception=e,
         )
         return [error_response]
+
+
+async def download_message_media_impl(
+    chat_id: str,
+    message_id: int,
+    output_dir: str | None = None,
+) -> dict[str, Any]:
+    """Download media from a specific message to a local file.
+
+    This is intended for agent/channel integrations that need a stable local path
+    for inbound media handling.
+
+    Args:
+        chat_id: Target chat identifier (username like '@channel', numeric ID, or '-100...' form)
+        message_id: Message ID (unique within chat)
+        output_dir: Optional directory to download into. If omitted, uses
+            ~/.config/fast-mcp-telegram/downloads/
+
+    Returns:
+        Dict:
+          - ok: bool
+          - chat_id: str
+          - message_id: int
+          - media_path: str (absolute local path)
+          - media_type: str | None
+          - approx_size_bytes: int | None
+    """
+    params = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "output_dir": output_dir,
+    }
+    log_operation_start("Downloading message media", params)
+
+    client = await get_connected_client()
+    try:
+        entity = await get_entity_by_id(chat_id)
+        if not entity:
+            return log_and_build_error(
+                operation="download_message_media",
+                error_message=f"Cannot find chat with ID '{chat_id}'",
+                params=params,
+                exception=ValueError(f"Cannot find chat with ID '{chat_id}'"),
+            )
+
+        msg = await client.get_messages(entity, ids=[message_id])
+        if isinstance(msg, list):
+            msg = msg[0] if msg else None
+
+        if not msg:
+            return log_and_build_error(
+                operation="download_message_media",
+                error_message=f"Message {message_id} not found or inaccessible",
+                params=params,
+                exception=ValueError("Message not found"),
+            )
+
+        if not getattr(msg, "media", None):
+            return log_and_build_error(
+                operation="download_message_media",
+                error_message=f"Message {message_id} has no media",
+                params=params,
+                exception=ValueError("No media"),
+            )
+
+        # Best-effort size check before download
+        config = get_config()
+        max_bytes = config.max_file_size_mb * 1024 * 1024
+        size_bytes = None
+        try:
+            f = getattr(msg, "file", None)
+            size_bytes = getattr(f, "size", None)
+        except Exception:
+            size_bytes = None
+
+        if isinstance(size_bytes, int) and size_bytes > max_bytes:
+            return log_and_build_error(
+                operation="download_message_media",
+                error_message=(
+                    f"Media too large: {size_bytes} bytes (max {max_bytes} bytes)"
+                ),
+                params=params,
+                exception=ValueError("Media too large"),
+            )
+
+        base_dir = (
+            Path(output_dir)
+            if output_dir
+            else (Path.home() / ".config" / "fast-mcp-telegram" / "downloads")
+        )
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        # Put each chat into its own directory for tidiness
+        chat_dir = base_dir / str(chat_id).replace("/", "_")
+        chat_dir.mkdir(parents=True, exist_ok=True)
+
+        downloaded = await msg.download_media(file=str(chat_dir))
+
+        if not downloaded:
+            return log_and_build_error(
+                operation="download_message_media",
+                error_message="Download returned empty result",
+                params=params,
+                exception=ValueError("Empty download result"),
+            )
+
+        # Telethon returns path string for file downloads.
+        media_path = str(downloaded)
+
+        media_type = None
+        try:
+            media_type = getattr(getattr(msg, "file", None), "mime_type", None)
+        except Exception:
+            media_type = None
+
+        log_operation_success(f"Downloaded media to {media_path}")
+        return {
+            "ok": True,
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "media_path": media_path,
+            "media_type": media_type,
+            "approx_size_bytes": size_bytes,
+        }
+
+    except Exception as e:
+        return log_and_build_error(
+            operation="download_message_media",
+            error_message=f"Failed to download media: {e!s}",
+            params=params,
+            exception=e,
+        )
 
 
 async def send_message_to_phone_impl(
