@@ -49,6 +49,7 @@ The project follows a modular architecture with clear separation of concerns:
 
 ### Error Handling
 - **Structured Errors**: Unified error response format across all tools
+- **RPC Error Codes**: invoke_mtproto maps Telegram RPC errors to machine-readable codes via Telethon rpc_errors_dict/rpc_errors_re (no custom mapping)
 - **Decorator-Based**: `@handle_telegram_errors` provides consistent exception handling
 - **Actionable Messages**: Errors include `action` field suggesting user steps (e.g., "authenticate_session")
 - **DRY Principle**: Centralized error logic reduces code duplication

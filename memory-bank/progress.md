@@ -1,5 +1,12 @@
+### 2026-02-19
+- **invoke_mtproto Hash Sanitization Fix (Issue 11)**: Type-preserving hash handling - strings kept for messages.ImportChatInvite, integers for state methods; invalid types removed instead of coercing to 0
+- **RPC Error Normalization (Issue 11)**: Machine-readable error_code in invoke_mtproto responses using Telethon rpc_errors_dict/rpc_errors_re reverse mapping; supports USER_ALREADY_PARTICIPANT, INVITE_HASH_EXPIRED, etc.
+- **Error Response Schema**: Added optional error_code parameter to build_error_response and log_and_build_error
+- **Tests**: New tests/test_mtproto.py with 11 tests for hash sanitization and error normalization
+- **Documentation**: Tools-Reference.md updated with hash parameter behavior and error_code field
+
 ### 2026-01-28
-- **Reply Markup Support - COMPLETED ✅**: Added automatic extraction and serialization of reply markup (keyboard buttons and inline buttons) from received messages
+- **Reply Markup Support**: Added automatic extraction and serialization of reply markup (keyboard buttons and inline buttons) from received messages
 - **Comprehensive Markup Types**: Supports ReplyKeyboardMarkup (keyboard buttons), ReplyInlineMarkup (inline buttons), ReplyKeyboardForceReply, and ReplyKeyboardHide
 - **Button Structure Serialization**: Extracts button text, types, URLs, callback data, and other interactive elements in LLM-friendly format
 - **Integration Points**: Added to both `build_message_result` (for read/search operations) and `build_send_edit_result` (for send/edit operations)
