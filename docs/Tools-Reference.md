@@ -32,6 +32,7 @@ All error responses follow this consistent structure:
   "ok": false,
   "error": "Human-readable error message",
   "operation": "tool_name",
+  "error_code": "USER_ALREADY_PARTICIPANT",  // optional: Telegram RPC code (invoke_mtproto)
   "action": "suggested_action",  // optional: what to do next
   "exception": {                 // optional: technical details
     "type": "ExceptionType",
@@ -530,9 +531,12 @@ invoke_mtproto(
 - **Dangerous method protection**: Blocks delete operations by default
 - **Entity resolution**: Automatically resolves usernames, chat IDs, etc.
 - **Parameter sanitization**: Security validation and cleanup
-- **Comprehensive error handling**: Structured error responses
+- **Comprehensive error handling**: Structured error responses with machine-readable `error_code` for Telegram RPC errors (e.g., `USER_ALREADY_PARTICIPANT`, `INVITE_HASH_EXPIRED`)
 
-**Use cases:** Advanced operations with complex parameters, raw Telegram API access
+**Parameter notes:**
+- `hash` parameter accepts both **string** (e.g., invite hash for `messages.ImportChatInvite`) and **integer** (for state/difference methods like `messages.GetState`)
+
+**Use cases:** Advanced operations with complex parameters, raw Telegram API access, joining groups via invite links
 
 **Examples:**
 ```json
@@ -561,7 +565,16 @@ invoke_mtproto(
   "method_full_name": "help.getnearestdc",
   "params_json": "{}"
 }}
+
+// Join a group via invite link - hash must be string (from t.me/+... link)
+{"tool": "invoke_mtproto", "params": {
+  "method_full_name": "messages.ImportChatInvite",
+  "params_json": "{\"hash\": \"ABC123xyz\"}",
+  "resolve": false
+}}
 ```
+
+On RPC errors, the response includes a machine-readable `error_code` (e.g., `USER_ALREADY_PARTICIPANT`, `INVITE_HASH_EXPIRED`) for programmatic handling.
 
 ### 🔄 **Automatic TL Object Construction**
 

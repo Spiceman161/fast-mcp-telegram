@@ -164,6 +164,7 @@ def build_error_response(
     params: dict[str, Any] | None = None,
     exception: Exception | None = None,
     action: str | None = None,
+    error_code: str | None = None,
 ) -> dict[str, Any]:
     """
     Build a standardized error response dictionary.
@@ -174,6 +175,7 @@ def build_error_response(
         params: Original parameters for context
         exception: Exception that caused the error (for logging)
         action: Optional action to suggest to the user (e.g., "run_setup")
+        error_code: Optional machine-readable Telegram RPC error code (e.g., "INVITE_HASH_EXPIRED")
 
     Returns:
         Standardized error response dictionary
@@ -196,6 +198,9 @@ def build_error_response(
     if action:
         error_response["action"] = action
 
+    if error_code:
+        error_response["error_code"] = error_code
+
     return error_response
 
 
@@ -206,6 +211,7 @@ def log_and_build_error(
     exception: Exception | None = None,
     log_level: str = "error",
     action: str | None = None,
+    error_code: str | None = None,
 ) -> dict[str, Any]:
     """
     Log an error and build a standardized error response.
@@ -217,6 +223,7 @@ def log_and_build_error(
         exception: Exception that caused the error
         log_level: Logging level ('error', 'warning', 'info', etc.)
         action: Optional action to suggest to the user (e.g., "run_setup")
+        error_code: Optional machine-readable Telegram RPC error code
 
     Returns:
         Standardized error response dictionary
@@ -251,6 +258,7 @@ def log_and_build_error(
         params=params,
         exception=exception,
         action=action,
+        error_code=error_code,
     )
 
 

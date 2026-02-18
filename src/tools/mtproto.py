@@ -2,8 +2,12 @@ import base64
 import inspect
 import json
 import logging
+import re
 from importlib import import_module
 from typing import Any
+
+from telethon.errors import RPCError
+from telethon.errors.rpcerrorlist import rpc_errors_dict, rpc_errors_re
 
 from src.client.connection import SessionNotAuthorizedError, get_connected_client
 from src.utils.error_handling import log_and_build_error
@@ -25,6 +29,38 @@ DANGEROUS_METHODS = {
     "channels.DeleteHistory",
     "channels.DeleteMessages",
 }
+
+# Reverse mapping: Telethon exception class -> Telegram RPC error code (from Telethon guts)
+_RPC_CLASS_TO_CODE: dict[type, str] = {
+    cls: code for code, cls in rpc_errors_dict.items()
+}
+for pattern, cls in rpc_errors_re:
+    base = re.sub(r"\([^)]+\)", "", pattern).strip("_").replace("__", "_")
+    _RPC_CLASS_TO_CODE[cls] = base
+
+# Regex for Telegram raw error codes (UPPER_SNAKE_CASE)
+_UPPER_SNAKE_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+def _normalize_rpc_error_code(exception: Exception) -> str | None:
+    """
+    Map a Telethon RPCError to a stable, machine-readable Telegram error code.
+
+    Uses Telethon's rpc_errors_dict and rpc_errors_re for mapping.
+    Fallback: use exception.message if it matches UPPER_SNAKE_CASE.
+
+    Returns:
+        Error code string (e.g., "INVITE_HASH_EXPIRED") or None
+    """
+    code = _RPC_CLASS_TO_CODE.get(type(exception))
+    if code:
+        return code
+    if isinstance(exception, RPCError):
+        msg = getattr(exception, "message", str(exception))
+        if isinstance(msg, str) and _UPPER_SNAKE_RE.match(msg.strip()):
+            return msg.strip()
+    return None
+
 
 # ============================================================================
 # UTILITY FUNCTIONS
@@ -250,29 +286,25 @@ def _sanitize_mtproto_params(params: dict[str, Any]) -> dict[str, Any]:
     sanitized = params.copy()
 
     # Security: Handle hash parameter correctly
-    # According to Telethon docs, 'hash' is a Telegram-specific identifier for data differences
-    # It's not a cryptographic hash and can often be safely set to 0
+    # 'hash' can be: (a) string invite hash for messages.ImportChatInvite, or
+    # (b) integer for state/difference methods like messages.GetState
     if "hash" in sanitized:
         hash_value = sanitized["hash"]
-
-        # Validate hash is a valid integer
-        if not isinstance(hash_value, int | str):
-            logger.warning(f"Invalid hash type: {type(hash_value)}, setting to 0")
-            sanitized["hash"] = 0
+        if isinstance(hash_value, str):
+            trimmed = hash_value.strip()
+            if trimmed:
+                sanitized["hash"] = trimmed
+            else:
+                del sanitized["hash"]
+        elif isinstance(hash_value, int):
+            if 0 <= hash_value <= 0xFFFFFFFF:
+                pass  # keep as int for difference/history methods
+            else:
+                logger.warning(f"Hash out of bounds: {hash_value}, removing")
+                del sanitized["hash"]
         else:
-            try:
-                # Convert to int if it's a string
-                if isinstance(hash_value, str):
-                    sanitized["hash"] = int(hash_value)
-                # Ensure it's within reasonable bounds (32-bit unsigned int)
-                elif not (0 <= hash_value <= 0xFFFFFFFF):
-                    logger.warning(
-                        f"Hash value out of bounds: {hash_value}, setting to 0"
-                    )
-                    sanitized["hash"] = 0
-            except (ValueError, OverflowError):
-                logger.warning(f"Invalid hash value: {hash_value}, setting to 0")
-                sanitized["hash"] = 0
+            logger.warning(f"Invalid hash type: {type(hash_value)}, removing")
+            del sanitized["hash"]
 
     # Security: Validate other critical parameters
     for key, value in list(sanitized.items()):
@@ -422,6 +454,18 @@ async def invoke_mtproto_impl(
                 },
                 exception=e,
                 action="authenticate_session",
+            )
+        except RPCError as e:
+            return log_and_build_error(
+                operation="invoke_mtproto",
+                error_message=f"Failed to invoke MTProto method '{normalized_method}': {e!s}",
+                params={
+                    "method_full_name": method_full_name,
+                    "normalized_method": normalized_method,
+                    "params": _json_safe(final_params),
+                },
+                exception=e,
+                error_code=_normalize_rpc_error_code(e),
             )
         except Exception as e:
             return log_and_build_error(
