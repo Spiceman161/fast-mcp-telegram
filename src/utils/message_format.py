@@ -399,11 +399,21 @@ async def build_message_result(
         "sender": sender,
     }
 
+    reply_to = getattr(message, "reply_to", None)
     reply_to_msg_id = getattr(message, "reply_to_msg_id", None) or getattr(
-        getattr(message, "reply_to", None), "reply_to_msg_id", None
+        reply_to, "reply_to_msg_id", None
     )
     if reply_to_msg_id is not None:
         result["reply_to_msg_id"] = reply_to_msg_id
+
+    # Topic metadata is exposed only for forum chats.
+    if chat.get("is_forum"):
+        reply_to_top_id = getattr(reply_to, "reply_to_top_id", None)
+        forum_topic = bool(getattr(reply_to, "forum_topic", False))
+        topic_id = reply_to_top_id or (reply_to_msg_id if forum_topic else None)
+        if topic_id is not None:
+            result["topic_id"] = topic_id
+            result["top_msg_id"] = topic_id
 
     if hasattr(message, "media") and message.media:
         media_placeholder = _build_media_placeholder(message)
