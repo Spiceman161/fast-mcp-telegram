@@ -50,6 +50,7 @@ async def test_build_message_result_includes_topic_fields_for_forum_chat():
 
 @pytest.mark.asyncio
 async def test_build_message_result_omits_topic_fields_for_non_forum_chat():
+    # A regular (non-forum) message: reply_to exists but forum_topic is False.
     entity = Channel(chat_id=124, title="Regular Channel", forum=False)
     message = SimpleNamespace(
         id=11,
@@ -58,7 +59,7 @@ async def test_build_message_result_omits_topic_fields_for_non_forum_chat():
         message="hello",
         caption=None,
         reply_to_msg_id=51,
-        reply_to=SimpleNamespace(reply_to_top_id=51, forum_topic=True),
+        reply_to=SimpleNamespace(reply_to_top_id=None, forum_topic=False),
         media=None,
     )
 
