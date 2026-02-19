@@ -215,7 +215,7 @@ async def _list_forum_topics(entity, limit: int = 20) -> list[dict[str, Any]]:
 
     result = await client(
         GetForumTopicsRequest(
-            channel=entity,
+            peer=entity,
             offset_date=None,
             offset_id=0,
             offset_topic=0,
