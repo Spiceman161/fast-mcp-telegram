@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from telethon.tl.functions.contacts import SearchRequest
+from telethon.tl.functions.messages import GetForumTopicsRequest
 
 from src.client.connection import SessionNotAuthorizedError, get_connected_client
 from src.utils.entity import (
@@ -207,18 +208,46 @@ search_contacts = find_chats_impl
 search_contacts_telegram = search_contacts_native
 
 
+async def _list_forum_topics(entity, limit: int = 20) -> list[dict[str, Any]]:
+    """Return compact forum topics list for forum-enabled chats."""
+    safe_limit = max(1, min(int(limit), 100))
+    client = await get_connected_client()
+
+    result = await client(
+        GetForumTopicsRequest(
+            channel=entity,
+            offset_date=None,
+            offset_id=0,
+            offset_topic=0,
+            limit=safe_limit,
+            q="",
+        )
+    )
+
+    topics = []
+    for topic in getattr(result, "topics", []) or []:
+        topic_id = getattr(topic, "id", None)
+        title = getattr(topic, "title", None)
+        if topic_id is None or title is None:
+            continue
+        topics.append({"id": topic_id, "title": title})
+
+    return topics
+
+
 @handle_telegram_errors(operation="get_chat_info")
-async def get_chat_info_impl(chat_id: str) -> dict[str, Any]:
+async def get_chat_info_impl(chat_id: str, topics_limit: int = 20) -> dict[str, Any]:
     """
     Get detailed information about a specific chat (user, group, or channel).
 
     Args:
         chat_id: The chat identifier (user/chat/channel)
+        topics_limit: Max topics to include for forum-enabled chats
 
     Returns:
         Chat information or error message if not found
     """
-    params = {"chat_id": chat_id}
+    params = {"chat_id": chat_id, "topics_limit": topics_limit}
 
     entity = await get_entity_by_id(chat_id)
 
@@ -230,8 +259,16 @@ async def get_chat_info_impl(chat_id: str) -> dict[str, Any]:
             exception=ValueError(f"Chat with ID '{chat_id}' not found"),
         )
 
-    # Return enriched info with counts and about/bio when applicable
-    return await build_entity_dict_enriched(entity)
+    info = await build_entity_dict_enriched(entity)
+
+    # Add topics list only for forum-enabled chats.
+    if info and info.get("is_forum"):
+        try:
+            info["topics"] = await _list_forum_topics(entity, topics_limit)
+        except Exception as e:
+            logger.debug(f"Failed to fetch forum topics for {chat_id}: {e}")
+
+    return info
 
 
 # Backwards-compatible alias

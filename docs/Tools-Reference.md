@@ -109,6 +109,8 @@ All message-returning tools (search, read, send, edit) return messages in a cons
     "username": "johndoe"
   },
   "reply_to_msg_id": 12344,       // ID of message being replied to (optional)
+  "topic_id": 52,                 // Forum topic ID (forum chats only)
+  "top_msg_id": 52,               // Forum topic root message ID (forum chats only)
   "media": {                      // Media attachment info (optional, lightweight)
     "type": "voice",              // Media type (voice, photo, video, etc.)
     "mime_type": "image/jpeg",    // File MIME type
