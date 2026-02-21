@@ -416,7 +416,6 @@ async def build_message_result(
         topic_id = reply_to_top_id or reply_to_msg_id
         if topic_id is not None:
             result["topic_id"] = topic_id
-            result["top_msg_id"] = topic_id
 
     if hasattr(message, "media") and message.media:
         media_placeholder = _build_media_placeholder(message)

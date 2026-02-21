@@ -110,7 +110,6 @@ All message-returning tools (search, read, send, edit) return messages in a cons
   },
   "reply_to_msg_id": 12344,       // ID of message being replied to (optional)
   "topic_id": 52,                 // Forum topic ID (forum chats only)
-  "top_msg_id": 52,               // Forum topic root message ID (forum chats only)
   "media": {                      // Media attachment info (optional, lightweight)
     "type": "voice",              // Media type (voice, photo, video, etc.)
     "mime_type": "image/jpeg",    // File MIME type
@@ -328,8 +327,7 @@ edit_message(
   chat_id: str,                  // Target chat ID (see Supported Chat ID Formats above)
   message_id: number,            // Message ID to edit (required)
   message: str,                  // New message content
-  parse_mode?: 'markdown'|'html'|'auto' = 'auto', // Text formatting (auto-detect by default)
-  topic_id?: number              // Optional forum topic root ID guard
+  parse_mode?: 'markdown'|'html'|'auto' = 'auto' // Text formatting (auto-detect by default)
 )
 ```
 
@@ -357,13 +355,6 @@ edit_message(
   "parse_mode": "html"
 }}
 
-// Topic-aware edit guard (forum chats)
-{"tool": "edit_message", "params": {
-  "chat_id": "-1001234567890",
-  "message_id": 67890,
-  "message": "Updated inside Topic 51",
-  "topic_id": 51
-}}
 ```
 
 ### 📖 read_messages

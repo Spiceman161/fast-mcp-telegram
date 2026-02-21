@@ -230,7 +230,7 @@ async def _list_forum_topics(entity, limit: int = 20) -> list[dict[str, Any]]:
         title = getattr(topic, "title", None)
         if topic_id is None or title is None:
             continue
-        topics.append({"id": topic_id, "title": title})
+        topics.append({"topic_id": topic_id, "title": title})
 
     return topics
 

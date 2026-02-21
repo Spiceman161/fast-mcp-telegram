@@ -45,7 +45,6 @@ async def test_build_message_result_includes_topic_fields_for_forum_chat():
         result = await build_message_result(None, message, entity, None)
 
     assert result["topic_id"] == 51
-    assert result["top_msg_id"] == 51
 
 
 @pytest.mark.asyncio
@@ -59,9 +58,7 @@ async def test_build_message_result_topic_fallback_to_message_reply_to_msg_id():
         caption=None,
         reply_to_msg_id=42,
         reply_to=SimpleNamespace(
-            reply_to_top_id=None,
-            forum_topic=True,
-            reply_to_msg_id=None,
+            reply_to_top_id=None, forum_topic=True, reply_to_msg_id=None
         ),
         media=None,
     )
@@ -79,7 +76,6 @@ async def test_build_message_result_topic_fallback_to_message_reply_to_msg_id():
         result = await build_message_result(None, message, entity, None)
 
     assert result["topic_id"] == 42
-    assert result["top_msg_id"] == 42
 
 
 @pytest.mark.asyncio
@@ -93,9 +89,7 @@ async def test_build_message_result_topic_fallback_to_reply_object_reply_to_msg_
         caption=None,
         reply_to_msg_id=None,
         reply_to=SimpleNamespace(
-            reply_to_top_id=None,
-            forum_topic=True,
-            reply_to_msg_id=99,
+            reply_to_top_id=None, forum_topic=True, reply_to_msg_id=99
         ),
         media=None,
     )
@@ -113,7 +107,6 @@ async def test_build_message_result_topic_fallback_to_reply_object_reply_to_msg_
         result = await build_message_result(None, message, entity, None)
 
     assert result["topic_id"] == 99
-    assert result["top_msg_id"] == 99
 
 
 @pytest.mark.asyncio
@@ -127,9 +120,7 @@ async def test_build_message_result_omits_topic_fields_when_forum_topic_has_no_i
         caption=None,
         reply_to_msg_id=None,
         reply_to=SimpleNamespace(
-            reply_to_top_id=None,
-            forum_topic=True,
-            reply_to_msg_id=None,
+            reply_to_top_id=None, forum_topic=True, reply_to_msg_id=None
         ),
         media=None,
     )
@@ -147,12 +138,10 @@ async def test_build_message_result_omits_topic_fields_when_forum_topic_has_no_i
         result = await build_message_result(None, message, entity, None)
 
     assert "topic_id" not in result
-    assert "top_msg_id" not in result
 
 
 @pytest.mark.asyncio
 async def test_build_message_result_omits_topic_fields_for_non_forum_chat():
-    # A regular (non-forum) message: reply_to exists but forum_topic is False.
     entity = Channel(chat_id=124, title="Regular Channel", forum=False)
     message = SimpleNamespace(
         id=11,
@@ -178,7 +167,6 @@ async def test_build_message_result_omits_topic_fields_for_non_forum_chat():
         result = await build_message_result(None, message, entity, None)
 
     assert "topic_id" not in result
-    assert "top_msg_id" not in result
 
 
 @pytest.mark.asyncio
@@ -202,12 +190,12 @@ async def test_get_chat_info_returns_topics_for_forum_chat():
         ),
         patch(
             "src.tools.contacts._list_forum_topics",
-            new=AsyncMock(return_value=[{"id": 7, "title": "Topic 7"}]),
+            new=AsyncMock(return_value=[{"topic_id": 7, "title": "Topic 7"}]),
         ) as topics_mock,
     ):
         result = await get_chat_info_impl("999", topics_limit=5)
 
-    assert result["topics"] == [{"id": 7, "title": "Topic 7"}]
+    assert result["topics"] == [{"topic_id": 7, "title": "Topic 7"}]
     topics_mock.assert_awaited_once()
 
 
@@ -280,50 +268,12 @@ async def test_send_message_or_files_prefers_reply_to_over_topic_id():
 
 
 @pytest.mark.asyncio
-async def test_edit_message_topic_aware_rejects_topic_mismatch():
-    client = AsyncMock()
-    chat = SimpleNamespace(id=1)
-    target_message = SimpleNamespace(
-        reply_to_msg_id=60,
-        reply_to=SimpleNamespace(reply_to_top_id=60, forum_topic=True),
-    )
-    client.get_messages = AsyncMock(return_value=target_message)
-
-    with (
-        patch(
-            "src.tools.messages.get_connected_client",
-            new=AsyncMock(return_value=client),
-        ),
-        patch("src.tools.messages.get_entity_by_id", new=AsyncMock(return_value=chat)),
-    ):
-        result = await edit_message_impl(
-            chat_id="-1001",
-            message_id=123,
-            new_text="updated",
-            parse_mode=None,
-            topic_id=51,
-        )
-
-    assert result["ok"] is False
-    assert "Topic mismatch" in result["error"]
-    client.edit_message.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_edit_message_topic_aware_success_includes_topic_fields():
+async def test_edit_message_in_forum_includes_topic_id_only():
     client = AsyncMock()
     chat = SimpleNamespace(
-        id=1,
-        title="Forum Chat",
-        forum=True,
-        broadcast=True,
-        megagroup=False,
+        id=1, title="Forum Chat", forum=True, broadcast=True, megagroup=False
     )
 
-    target_message = SimpleNamespace(
-        reply_to_msg_id=51,
-        reply_to=SimpleNamespace(reply_to_top_id=51, forum_topic=True),
-    )
     edited_message = SimpleNamespace(
         id=123,
         date=datetime.now(UTC),
@@ -334,7 +284,6 @@ async def test_edit_message_topic_aware_success_includes_topic_fields():
         reply_to=SimpleNamespace(reply_to_top_id=51, forum_topic=True),
     )
 
-    client.get_messages = AsyncMock(return_value=target_message)
     client.edit_message = AsyncMock(return_value=edited_message)
 
     with (
@@ -349,10 +298,9 @@ async def test_edit_message_topic_aware_success_includes_topic_fields():
             message_id=123,
             new_text="updated",
             parse_mode=None,
-            topic_id=51,
         )
 
     assert result["status"] == "edited"
     assert result["topic_id"] == 51
-    assert result["top_msg_id"] == 51
+    assert "top_msg_id" not in result
     client.edit_message.assert_awaited_once()
