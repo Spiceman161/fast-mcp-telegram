@@ -202,6 +202,7 @@ def register_tools(mcp: FastMCP) -> None:
         message_id: int,
         message: str,
         parse_mode: Literal["markdown", "html", "auto"] | None = "auto",
+        topic_id: int | None = None,
     ) -> dict:
         """
         Edit existing message in Telegram chat.
@@ -214,14 +215,23 @@ def register_tools(mcp: FastMCP) -> None:
         EXAMPLES:
         edit_message(chat_id="me", message_id=12345, message="Updated text")  # Edit Saved Messages
         edit_message(chat_id="-1001234567890", message_id=67890, message="*Updated* message")  # Edit with formatting
+        edit_message(chat_id="-1001234567890", message_id=67890, message="Updated in topic", topic_id=51)  # Topic-aware guard
 
         Args:
             chat_id: Target chat ID ('me' for Saved Messages, numeric ID, or username)
             message_id: Message ID to edit (required)
             message: New message text
             parse_mode: Text formatting ("markdown", "html", "auto", or None). Default: "auto"
+            topic_id: Optional forum topic root ID guard; when provided, edit is allowed
+                only if the target message belongs to this topic.
         """
-        return await edit_message_impl(chat_id, message_id, message, parse_mode)
+        return await edit_message_impl(
+            chat_id,
+            message_id,
+            message,
+            parse_mode,
+            topic_id,
+        )
 
     @mcp.tool(
         annotations=ToolAnnotations(

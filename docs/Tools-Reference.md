@@ -328,7 +328,8 @@ edit_message(
   chat_id: str,                  // Target chat ID (see Supported Chat ID Formats above)
   message_id: number,            // Message ID to edit (required)
   message: str,                  // New message content
-  parse_mode?: 'markdown'|'html'|'auto' = 'auto' // Text formatting (auto-detect by default)
+  parse_mode?: 'markdown'|'html'|'auto' = 'auto', // Text formatting (auto-detect by default)
+  topic_id?: number              // Optional forum topic root ID guard
 )
 ```
 
@@ -354,6 +355,14 @@ edit_message(
   "message_id": 67890,
   "message": "<b>Updated:</b> Meeting rescheduled to 4 PM",
   "parse_mode": "html"
+}}
+
+// Topic-aware edit guard (forum chats)
+{"tool": "edit_message", "params": {
+  "chat_id": "-1001234567890",
+  "message_id": 67890,
+  "message": "Updated inside Topic 51",
+  "topic_id": 51
 }}
 ```
 

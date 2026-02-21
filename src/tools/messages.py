@@ -473,7 +473,11 @@ async def send_message_impl(
 
 
 async def edit_message_impl(
-    chat_id: str, message_id: int, new_text: str, parse_mode: str | None = None
+    chat_id: str,
+    message_id: int,
+    new_text: str,
+    parse_mode: str | None = None,
+    topic_id: int | None = None,
 ) -> dict[str, Any]:
     """
     Edit an existing message in a Telegram chat.
@@ -483,6 +487,8 @@ async def edit_message_impl(
         message_id: ID of the message to edit
         new_text: The new text content for the message
         parse_mode: Parse mode ('markdown' or 'html')
+        topic_id: Optional forum topic root ID guard. If provided, edit is allowed
+            only when the target message belongs to this topic.
     """
     params = {
         "chat_id": chat_id,
@@ -490,6 +496,7 @@ async def edit_message_impl(
         "new_text": new_text,
         "new_text_length": len(new_text),
         "parse_mode": parse_mode,
+        "topic_id": topic_id,
     }
 
     # Resolve auto parse mode
@@ -513,6 +520,43 @@ async def edit_message_impl(
                 ),
             )
 
+        if topic_id is not None:
+            target_message = await client.get_messages(chat, ids=[message_id])
+            if isinstance(target_message, list):
+                target_message = target_message[0] if target_message else None
+
+            if not target_message:
+                return log_and_build_error(
+                    operation="edit_message",
+                    error_message=(
+                        f"Message {message_id} not found or inaccessible "
+                        f"for topic-aware edit"
+                    ),
+                    params=params,
+                    exception=ValueError("Message not found"),
+                )
+
+            reply_to = getattr(target_message, "reply_to", None)
+            target_reply_to_msg_id = getattr(
+                target_message, "reply_to_msg_id", None
+            ) or getattr(reply_to, "reply_to_msg_id", None)
+            forum_topic = bool(getattr(reply_to, "forum_topic", False))
+            reply_to_top_id = getattr(reply_to, "reply_to_top_id", None)
+            target_topic_id = reply_to_top_id or (
+                target_reply_to_msg_id if forum_topic else None
+            )
+
+            if target_topic_id != topic_id:
+                return log_and_build_error(
+                    operation="edit_message",
+                    error_message=(
+                        "Topic mismatch for edit_message: "
+                        f"message topic={target_topic_id}, requested topic={topic_id}"
+                    ),
+                    params=params,
+                    exception=ValueError("Topic mismatch"),
+                )
+
         # Edit message
         edited_message = await client.edit_message(
             entity=chat,
@@ -522,6 +566,20 @@ async def edit_message_impl(
         )
 
         result = build_send_edit_result(edited_message, chat, "edited")
+
+        edited_reply_to = getattr(edited_message, "reply_to", None)
+        edited_reply_to_msg_id = getattr(
+            edited_message, "reply_to_msg_id", None
+        ) or getattr(edited_reply_to, "reply_to_msg_id", None)
+        edited_forum_topic = bool(getattr(edited_reply_to, "forum_topic", False))
+        edited_reply_to_top_id = getattr(edited_reply_to, "reply_to_top_id", None)
+        edited_topic_id = edited_reply_to_top_id or (
+            edited_reply_to_msg_id if edited_forum_topic else None
+        )
+        if edited_topic_id is not None:
+            result["topic_id"] = edited_topic_id
+            result["top_msg_id"] = edited_topic_id
+
         log_operation_success("Message edited", chat_id)
         return result
 
