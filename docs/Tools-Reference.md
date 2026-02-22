@@ -80,7 +80,8 @@ All tools return chat/user objects in the same schema via `build_entity_dict`:
   "first_name": "John",         // users
   "last_name": "Doe",           // users
   "members_count": 1234,          // groups (when available)
-  "subscribers_count": 56789      // channels (when available)
+  "subscribers_count": 56789,     // channels (when available)
+  "is_forum": true               // present and true for forum-enabled supergroups only
 }
 ```
 
@@ -266,7 +267,8 @@ search_messages_in_chat(
 send_message(
   chat_id: str,                  // Target chat ID (see Supported Chat ID Formats above)
   message: str,                  // Message content (becomes caption when files sent)
-  reply_to_msg_id?: number,      // Reply to specific message
+  reply_to_msg_id?: number,      // Reply to specific message (takes priority over topic_id)
+  topic_id?: number,             // Forum topic ID to post into (forum chats only)
   parse_mode?: 'markdown'|'html'|'auto' = 'auto', // Text formatting (auto-detect by default)
   files?: string | string[]      // File URL(s) or local path(s)
 )
@@ -316,6 +318,13 @@ send_message(
   "message": "*Important:* Meeting at 3 PM",
   "parse_mode": "markdown",
   "reply_to_msg_id": 67890
+}}
+
+// Post into a forum topic (topic_id from get_chat_info topics list)
+{"tool": "send_message", "params": {
+  "chat_id": "-1001234567890",
+  "message": "Hello forum thread!",
+  "topic_id": 52
 }}
 ```
 
@@ -443,7 +452,8 @@ find_chats(
 
 ```typescript
 get_chat_info(
-  chat_id: str                  // User/channel identifier (see Supported Chat ID Formats above)
+  chat_id: str,                 // User/channel identifier (see Supported Chat ID Formats above)
+  topics_limit?: number = 20   // Max number of forum topics to return (1–100, forum chats only)
 )
 ```
 
@@ -452,6 +462,9 @@ get_chat_info(
 Also includes, when applicable:
 - `members_count` for groups (regular groups and megagroups)
 - `subscribers_count` for channels (broadcast)
+- `is_forum: true` for forum-enabled supergroups
+- `topics`: list of `{"topic_id": number, "title": string}` entries (forum chats only)
+- `topics_has_more: true` when there are more topics than `topics_limit`
 
 Counts are fetched via Telethon full-info requests and reflect current values.
 
@@ -465,6 +478,12 @@ Counts are fetched via Telethon full-info requests and reflect current values.
 
 // Get channel information
 {"tool": "get_chat_info", "params": {"chat_id": "-1001234567890"}}
+
+// Get forum topics (returns up to 20 by default)
+{"tool": "get_chat_info", "params": {"chat_id": "-1001234567890"}}
+
+// Get more forum topics
+{"tool": "get_chat_info", "params": {"chat_id": "-1001234567890", "topics_limit": 50}}
 ```
 
 ### 📱 send_message_to_phone

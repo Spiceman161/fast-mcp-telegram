@@ -413,9 +413,8 @@ async def build_message_result(
         "sender": sender,
     }
 
-    reply_to = getattr(message, "reply_to", None)
     reply_to_msg_id = getattr(message, "reply_to_msg_id", None) or getattr(
-        reply_to, "reply_to_msg_id", None
+        getattr(message, "reply_to", None), "reply_to_msg_id", None
     )
     if reply_to_msg_id is not None:
         result["reply_to_msg_id"] = reply_to_msg_id
