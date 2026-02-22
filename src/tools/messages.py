@@ -15,6 +15,7 @@ from src.utils.entity import build_entity_dict, get_entity_by_id
 from src.utils.error_handling import handle_telegram_errors, log_and_build_error
 from src.utils.logging_utils import log_operation_start, log_operation_success
 from src.utils.message_format import (
+    _extract_topic_metadata,
     build_message_result,
     build_send_edit_result,
     transcribe_voice_messages,
@@ -525,18 +526,7 @@ async def edit_message_impl(
         )
 
         result = build_send_edit_result(edited_message, chat, "edited")
-
-        edited_reply_to = getattr(edited_message, "reply_to", None)
-        edited_reply_to_msg_id = getattr(
-            edited_message, "reply_to_msg_id", None
-        ) or getattr(edited_reply_to, "reply_to_msg_id", None)
-        edited_forum_topic = bool(getattr(edited_reply_to, "forum_topic", False))
-        edited_reply_to_top_id = getattr(edited_reply_to, "reply_to_top_id", None)
-        edited_topic_id = edited_reply_to_top_id or (
-            edited_reply_to_msg_id if edited_forum_topic else None
-        )
-        if edited_topic_id is not None:
-            result["topic_id"] = edited_topic_id
+        result.update(_extract_topic_metadata(edited_message))
 
         log_operation_success("Message edited", chat_id)
         return result

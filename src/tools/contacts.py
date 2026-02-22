@@ -208,9 +208,14 @@ search_contacts = find_chats_impl
 search_contacts_telegram = search_contacts_native
 
 
-async def _list_forum_topics(entity, limit: int = 20) -> list[dict[str, Any]]:
+async def _list_forum_topics(entity, limit: int = 20) -> dict[str, Any]:
     """Return compact forum topics list for forum-enabled chats."""
-    safe_limit = max(1, min(int(limit), 100))
+    try:
+        safe_limit = int(limit) if limit is not None else 20
+    except (TypeError, ValueError):
+        safe_limit = 20
+    safe_limit = max(1, min(safe_limit, 100))
+
     client = await get_connected_client()
 
     result = await client(
@@ -224,15 +229,16 @@ async def _list_forum_topics(entity, limit: int = 20) -> list[dict[str, Any]]:
         )
     )
 
+    raw_topics = getattr(result, "topics", []) or []
     topics = []
-    for topic in getattr(result, "topics", []) or []:
+    for topic in raw_topics:
         topic_id = getattr(topic, "id", None)
         title = getattr(topic, "title", None)
         if topic_id is None or title is None:
             continue
         topics.append({"topic_id": topic_id, "title": title})
 
-    return topics
+    return {"topics": topics, "has_more": len(raw_topics) >= safe_limit}
 
 
 @handle_telegram_errors(operation="get_chat_info")
@@ -264,7 +270,9 @@ async def get_chat_info_impl(chat_id: str, topics_limit: int = 20) -> dict[str, 
     # Add topics list only for forum-enabled chats.
     if info and info.get("is_forum"):
         try:
-            info["topics"] = await _list_forum_topics(entity, topics_limit)
+            topics_result = await _list_forum_topics(entity, topics_limit)
+            info["topics"] = topics_result["topics"]
+            info["topics_has_more"] = topics_result["has_more"]
         except Exception as e:
             logger.debug(f"Failed to fetch forum topics for {chat_id}: {e}")
 

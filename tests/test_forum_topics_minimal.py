@@ -190,12 +190,18 @@ async def test_get_chat_info_returns_topics_for_forum_chat():
         ),
         patch(
             "src.tools.contacts._list_forum_topics",
-            new=AsyncMock(return_value=[{"topic_id": 7, "title": "Topic 7"}]),
+            new=AsyncMock(
+                return_value={
+                    "topics": [{"topic_id": 7, "title": "Topic 7"}],
+                    "has_more": False,
+                }
+            ),
         ) as topics_mock,
     ):
         result = await get_chat_info_impl("999", topics_limit=5)
 
     assert result["topics"] == [{"topic_id": 7, "title": "Topic 7"}]
+    assert result["topics_has_more"] is False
     topics_mock.assert_awaited_once()
 
 
@@ -304,3 +310,151 @@ async def test_edit_message_in_forum_includes_topic_id_only():
     assert result["topic_id"] == 51
     assert "top_msg_id" not in result
     client.edit_message.assert_awaited_once()
+
+
+# --- 4b: File-sending branch in _send_message_or_files ---
+
+
+@pytest.mark.asyncio
+async def test_send_message_or_files_files_with_topic_id():
+    """files non-empty, reply_to_msg_id=None, topic_id=123 → _send_files_to_entity called with correct reply_to."""
+    client = AsyncMock()
+    entity = SimpleNamespace(id=1)
+
+    with patch(
+        "src.tools.messages._validate_file_paths",
+        return_value=(["http://example.com/photo.jpg"], None),
+    ), patch(
+        "src.tools.messages._send_files_to_entity",
+        new=AsyncMock(return_value=SimpleNamespace(id=1)),
+    ) as send_files_mock:
+        error, _ = await _send_message_or_files(
+            client=client,
+            entity=entity,
+            message="hello",
+            files=["http://example.com/photo.jpg"],
+            reply_to_msg_id=None,
+            topic_id=123,
+            parse_mode=None,
+            operation="send_message",
+            params={},
+        )
+
+    assert error is None
+    send_files_mock.assert_awaited_once()
+    # effective_reply_to should be topic_id since reply_to_msg_id is None
+    assert send_files_mock.await_args[0][4] == 123  # effective_reply_to positional arg
+
+
+@pytest.mark.asyncio
+async def test_send_message_or_files_files_reply_to_wins_over_topic_id():
+    """files non-empty, both reply_to_msg_id and topic_id set → reply_to_msg_id wins."""
+    client = AsyncMock()
+    entity = SimpleNamespace(id=1)
+
+    with patch(
+        "src.tools.messages._validate_file_paths",
+        return_value=(["http://example.com/photo.jpg"], None),
+    ), patch(
+        "src.tools.messages._send_files_to_entity",
+        new=AsyncMock(return_value=SimpleNamespace(id=1)),
+    ) as send_files_mock:
+        error, _ = await _send_message_or_files(
+            client=client,
+            entity=entity,
+            message="hello",
+            files=["http://example.com/photo.jpg"],
+            reply_to_msg_id=456,
+            topic_id=123,
+            parse_mode=None,
+            operation="send_message",
+            params={},
+        )
+
+    assert error is None
+    send_files_mock.assert_awaited_once()
+    # effective_reply_to should be reply_to_msg_id since it's not None
+    assert send_files_mock.await_args[0][4] == 456
+
+
+# --- 4c: edit_message_impl edge cases ---
+
+
+@pytest.mark.asyncio
+async def test_edit_message_non_forum_omits_topic_id():
+    """forum_topic=False → no topic_id in result."""
+    client = AsyncMock()
+    chat = SimpleNamespace(
+        id=1, title="Regular Chat", forum=False, broadcast=True, megagroup=False
+    )
+
+    edited_message = SimpleNamespace(
+        id=123,
+        date=datetime.now(UTC),
+        edit_date=datetime.now(UTC),
+        text="updated",
+        sender=None,
+        reply_to_msg_id=51,
+        reply_to=SimpleNamespace(
+            reply_to_top_id=None, forum_topic=False, reply_to_msg_id=51
+        ),
+    )
+
+    client.edit_message = AsyncMock(return_value=edited_message)
+
+    with (
+        patch(
+            "src.tools.messages.get_connected_client",
+            new=AsyncMock(return_value=client),
+        ),
+        patch("src.tools.messages.get_entity_by_id", new=AsyncMock(return_value=chat)),
+    ):
+        result = await edit_message_impl(
+            chat_id="-1001",
+            message_id=123,
+            new_text="updated",
+            parse_mode=None,
+        )
+
+    assert result["status"] == "edited"
+    assert "topic_id" not in result
+
+
+@pytest.mark.asyncio
+async def test_edit_message_forum_no_ids_omits_topic_id():
+    """forum_topic=True, all ids None → no topic_id."""
+    client = AsyncMock()
+    chat = SimpleNamespace(
+        id=1, title="Forum Chat", forum=True, broadcast=True, megagroup=False
+    )
+
+    edited_message = SimpleNamespace(
+        id=123,
+        date=datetime.now(UTC),
+        edit_date=datetime.now(UTC),
+        text="updated",
+        sender=None,
+        reply_to_msg_id=None,
+        reply_to=SimpleNamespace(
+            reply_to_top_id=None, forum_topic=True, reply_to_msg_id=None
+        ),
+    )
+
+    client.edit_message = AsyncMock(return_value=edited_message)
+
+    with (
+        patch(
+            "src.tools.messages.get_connected_client",
+            new=AsyncMock(return_value=client),
+        ),
+        patch("src.tools.messages.get_entity_by_id", new=AsyncMock(return_value=chat)),
+    ):
+        result = await edit_message_impl(
+            chat_id="-1001",
+            message_id=123,
+            new_text="updated",
+            parse_mode=None,
+        )
+
+    assert result["status"] == "edited"
+    assert "topic_id" not in result
