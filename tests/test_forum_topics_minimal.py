@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -6,7 +7,7 @@ import pytest
 
 from src.tools.contacts import _list_forum_topics, get_chat_info_impl
 from src.tools.messages import _send_message_or_files, edit_message_impl
-from src.utils.message_format import build_message_result
+from src.utils.message_format import _extract_topic_metadata, build_message_result
 
 
 class Channel:
@@ -521,3 +522,150 @@ async def test_list_forum_topics_handles_invalid_limit_with_default():
     assert request.limit == 21
     assert len(result["topics"]) == 20
     assert result["has_more"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_forum_topics_limit_is_clamped_to_one_and_hundred():
+    entity = SimpleNamespace(id=999)
+    client = AsyncMock(return_value=SimpleNamespace(topics=[]))
+
+    with patch("src.tools.contacts.get_connected_client", new=AsyncMock(return_value=client)):
+        await _list_forum_topics(entity, limit=0)
+    req_low = client.await_args.args[0]
+    assert req_low.limit == 2  # requested_limit=1 -> fetch_limit=2
+
+    client.reset_mock(return_value=True)
+    client.return_value = SimpleNamespace(topics=[])
+    with patch("src.tools.contacts.get_connected_client", new=AsyncMock(return_value=client)):
+        await _list_forum_topics(entity, limit=10_000)
+    req_high = client.await_args.args[0]
+    assert req_high.limit == 100  # max clamp
+
+
+@pytest.mark.asyncio
+async def test_list_forum_topics_filters_items_missing_id_or_title():
+    entity = SimpleNamespace(id=999)
+    raw_topics = [
+        SimpleNamespace(id=1, title="ok"),
+        SimpleNamespace(id=None, title="bad"),
+        SimpleNamespace(id=3, title=None),
+        SimpleNamespace(id=4, title="ok-2"),
+    ]
+    client = AsyncMock(return_value=SimpleNamespace(topics=raw_topics))
+
+    with patch("src.tools.contacts.get_connected_client", new=AsyncMock(return_value=client)):
+        result = await _list_forum_topics(entity, limit=20)
+
+    assert result["topics"] == [
+        {"topic_id": 1, "title": "ok"},
+        {"topic_id": 4, "title": "ok-2"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_chat_info_not_found_returns_error_dict():
+    with patch(
+        "src.tools.contacts.get_entity_by_id",
+        new=AsyncMock(return_value=None),
+    ):
+        result = await get_chat_info_impl("404")
+
+    assert "error" in result
+    assert "404" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_chat_info_forum_topics_failure_is_non_fatal():
+    entity = Channel(chat_id=999, title="Forum Chat", forum=True)
+
+    with (
+        patch(
+            "src.tools.contacts.get_entity_by_id",
+            new=AsyncMock(return_value=entity),
+        ),
+        patch(
+            "src.tools.contacts.build_entity_dict_enriched",
+            new=AsyncMock(
+                return_value={"id": 999, "title": "Forum Chat", "is_forum": True}
+            ),
+        ),
+        patch(
+            "src.tools.contacts._list_forum_topics",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ),
+    ):
+        result = await get_chat_info_impl("999", topics_limit=5)
+
+    assert result["id"] == 999
+    assert "topics" not in result
+    assert "topics_has_more" not in result
+
+
+def test_extract_topic_metadata_prefers_reply_to_top_id():
+    message = SimpleNamespace(
+        reply_to_msg_id=10,
+        reply_to=SimpleNamespace(reply_to_top_id=99, reply_to_msg_id=55, forum_topic=True),
+    )
+    assert _extract_topic_metadata(message) == {"topic_id": 99}
+
+
+def test_extract_topic_metadata_uses_message_reply_to_msg_id_fallback():
+    message = SimpleNamespace(
+        reply_to_msg_id=42,
+        reply_to=SimpleNamespace(reply_to_top_id=None, reply_to_msg_id=None, forum_topic=True),
+    )
+    assert _extract_topic_metadata(message) == {"topic_id": 42}
+
+
+def test_extract_topic_metadata_uses_reply_object_reply_to_msg_id_fallback():
+    message = SimpleNamespace(
+        reply_to_msg_id=None,
+        reply_to=SimpleNamespace(reply_to_top_id=None, reply_to_msg_id=77, forum_topic=True),
+    )
+    assert _extract_topic_metadata(message) == {"topic_id": 77}
+
+
+def test_extract_topic_metadata_non_forum_returns_empty_even_with_reply_ids():
+    message = SimpleNamespace(
+        reply_to_msg_id=55,
+        reply_to=SimpleNamespace(reply_to_top_id=None, reply_to_msg_id=55, forum_topic=False),
+    )
+    assert _extract_topic_metadata(message) == {}
+
+
+def test_extract_topic_metadata_without_reply_data_returns_empty():
+    message = SimpleNamespace(reply_to_msg_id=None, reply_to=None)
+    assert _extract_topic_metadata(message) == {}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_forum_topics_live_api_shape():
+    """Optional live integration test (disabled by default).
+
+    Enable with:
+      FAST_MCP_TELEGRAM_LIVE_TESTS=1
+      FAST_MCP_TELEGRAM_FORUM_CHAT_ID=<chat_id>
+    """
+    if os.getenv("FAST_MCP_TELEGRAM_LIVE_TESTS") != "1":
+        pytest.skip("live integration disabled")
+
+    chat_id = os.getenv("FAST_MCP_TELEGRAM_FORUM_CHAT_ID")
+    if not chat_id:
+        pytest.skip("FAST_MCP_TELEGRAM_FORUM_CHAT_ID not set")
+
+    from src.tools.contacts import get_entity_by_id
+
+    entity = await get_entity_by_id(chat_id)
+    if not entity:
+        pytest.skip("forum entity not accessible")
+
+    result = await _list_forum_topics(entity, limit=5)
+    assert isinstance(result, dict)
+    assert "topics" in result
+    assert "has_more" in result
+    assert isinstance(result["topics"], list)
+    assert isinstance(result["has_more"], bool)
+    for item in result["topics"]:
+        assert "topic_id" in item
+        assert "title" in item
