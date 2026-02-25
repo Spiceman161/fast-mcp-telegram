@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.tools.contacts import get_chat_info_impl
+from src.tools.contacts import _list_forum_topics, get_chat_info_impl
 from src.tools.messages import _send_message_or_files, edit_message_impl
 from src.utils.message_format import build_message_result
 
@@ -458,3 +458,66 @@ async def test_edit_message_forum_no_ids_omits_topic_id():
 
     assert result["status"] == "edited"
     assert "topic_id" not in result
+
+
+# --- 4d: _list_forum_topics edge cases for has_more ---
+
+
+@pytest.mark.asyncio
+async def test_list_forum_topics_exactly_limit_has_more_false_and_requests_plus_one():
+    entity = SimpleNamespace(id=999)
+    # API returns exactly 20 topics even though we requested 21.
+    topics = [SimpleNamespace(id=i, title=f"Topic {i}") for i in range(1, 21)]
+    client = AsyncMock(return_value=SimpleNamespace(topics=topics))
+
+    with patch("src.tools.contacts.get_connected_client", new=AsyncMock(return_value=client)):
+        result = await _list_forum_topics(entity, limit=20)
+
+    request = client.await_args.args[0]
+    assert request.limit == 21
+    assert len(result["topics"]) == 20
+    assert result["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_forum_topics_limit_plus_one_has_more_true_and_trims_output():
+    entity = SimpleNamespace(id=999)
+    topics = [SimpleNamespace(id=i, title=f"Topic {i}") for i in range(1, 22)]
+    client = AsyncMock(return_value=SimpleNamespace(topics=topics))
+
+    with patch("src.tools.contacts.get_connected_client", new=AsyncMock(return_value=client)):
+        result = await _list_forum_topics(entity, limit=20)
+
+    assert len(result["topics"]) == 20
+    assert result["topics"][0]["topic_id"] == 1
+    assert result["topics"][-1]["topic_id"] == 20
+    assert result["has_more"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_forum_topics_uses_count_when_available():
+    entity = SimpleNamespace(id=999)
+    topics = [SimpleNamespace(id=i, title=f"Topic {i}") for i in range(1, 21)]
+    # Telegram may return exactly 'limit' items with total count metadata.
+    client = AsyncMock(return_value=SimpleNamespace(topics=topics, count=55))
+
+    with patch("src.tools.contacts.get_connected_client", new=AsyncMock(return_value=client)):
+        result = await _list_forum_topics(entity, limit=20)
+
+    assert result["has_more"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_forum_topics_handles_invalid_limit_with_default():
+    entity = SimpleNamespace(id=999)
+    topics = [SimpleNamespace(id=i, title=f"Topic {i}") for i in range(1, 22)]
+    client = AsyncMock(return_value=SimpleNamespace(topics=topics))
+
+    with patch("src.tools.contacts.get_connected_client", new=AsyncMock(return_value=client)):
+        result = await _list_forum_topics(entity, limit="not-a-number")
+
+    request = client.await_args.args[0]
+    # Default limit is 20, fetches one extra for has_more detection.
+    assert request.limit == 21
+    assert len(result["topics"]) == 20
+    assert result["has_more"] is True

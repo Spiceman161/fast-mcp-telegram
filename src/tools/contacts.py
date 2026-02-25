@@ -211,10 +211,13 @@ search_contacts_telegram = search_contacts_native
 async def _list_forum_topics(entity, limit: int = 20) -> dict[str, Any]:
     """Return compact forum topics list for forum-enabled chats."""
     try:
-        safe_limit = int(limit) if limit is not None else 20
+        requested_limit = int(limit) if limit is not None else 20
     except (TypeError, ValueError):
-        safe_limit = 20
-    safe_limit = max(1, min(safe_limit, 100))
+        requested_limit = 20
+    requested_limit = max(1, min(requested_limit, 100))
+
+    # Ask for one extra topic when possible to compute has_more reliably.
+    fetch_limit = min(requested_limit + 1, 100)
 
     client = await get_connected_client()
 
@@ -224,21 +227,29 @@ async def _list_forum_topics(entity, limit: int = 20) -> dict[str, Any]:
             offset_date=None,
             offset_id=0,
             offset_topic=0,
-            limit=safe_limit,
+            limit=fetch_limit,
             q="",
         )
     )
 
     raw_topics = getattr(result, "topics", []) or []
+    total_count = getattr(result, "count", None)
+
+    # Compute has_more first, then trim payload to requested_limit.
+    if isinstance(total_count, int):
+        has_more = total_count > requested_limit
+    else:
+        has_more = len(raw_topics) > requested_limit
+
     topics = []
-    for topic in raw_topics:
+    for topic in raw_topics[:requested_limit]:
         topic_id = getattr(topic, "id", None)
         title = getattr(topic, "title", None)
         if topic_id is None or title is None:
             continue
         topics.append({"topic_id": topic_id, "title": title})
 
-    return {"topics": topics, "has_more": len(raw_topics) >= safe_limit}
+    return {"topics": topics, "has_more": has_more}
 
 
 @handle_telegram_errors(operation="get_chat_info")
