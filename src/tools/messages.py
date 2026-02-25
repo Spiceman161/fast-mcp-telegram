@@ -393,7 +393,6 @@ def _extract_send_message_params(
         "topic_id": topic_id,
         "parse_mode": parse_mode,
         "has_reply": reply_to_msg_id is not None,
-        "has_topic": topic_id is not None,
         "has_files": bool(files),
         "file_count": _calculate_file_count(files),
     }

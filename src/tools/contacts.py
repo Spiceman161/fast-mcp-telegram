@@ -269,11 +269,12 @@ async def get_chat_info_impl(chat_id: str, topics_limit: int = 20) -> dict[str, 
     entity = await get_entity_by_id(chat_id)
 
     if not entity:
+        not_found_msg = f"Chat with ID '{chat_id}' not found"
         return log_and_build_error(
             operation="get_chat_info",
-            error_message=f"Chat with ID '{chat_id}' not found",
+            error_message=not_found_msg,
             params=params,
-            exception=ValueError(f"Chat with ID '{chat_id}' not found"),
+            exception=ValueError(not_found_msg),
         )
 
     info = await build_entity_dict_enriched(entity)
