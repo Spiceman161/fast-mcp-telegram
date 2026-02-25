@@ -31,7 +31,7 @@ class MockTelegramClient:
             ],
         }
 
-    async def is_connected(self):
+    def is_connected(self):
         return self.is_connected_value
 
     async def iter_messages(self, entity, limit=50, search=None):
