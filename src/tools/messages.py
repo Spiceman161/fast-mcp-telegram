@@ -385,6 +385,7 @@ def _extract_send_message_params(
     files: str | list[str] | None = None,
 ) -> dict:
     """Extract params for send_message error handling."""
+    has_reply_target = (reply_to_msg_id is not None) or (topic_id is not None)
     return {
         "chat_id": chat_id,
         "message": message,
@@ -392,7 +393,7 @@ def _extract_send_message_params(
         "reply_to_msg_id": reply_to_msg_id,
         "topic_id": topic_id,
         "parse_mode": parse_mode,
-        "has_reply": reply_to_msg_id is not None,
+        "has_reply": has_reply_target,
         "has_files": bool(files),
         "file_count": _calculate_file_count(files),
     }

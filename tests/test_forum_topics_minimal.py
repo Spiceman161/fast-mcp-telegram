@@ -6,7 +6,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.tools.contacts import _list_forum_topics, get_chat_info_impl
-from src.tools.messages import _send_message_or_files, edit_message_impl
+from src.tools.messages import (
+    _extract_send_message_params,
+    _send_message_or_files,
+    edit_message_impl,
+)
 from src.utils.message_format import _extract_topic_metadata, build_message_result
 
 
@@ -669,6 +673,30 @@ def test_extract_topic_metadata_non_forum_returns_empty_even_with_reply_ids():
 def test_extract_topic_metadata_without_reply_data_returns_empty():
     message = SimpleNamespace(reply_to_msg_id=None, reply_to=None)
     assert _extract_topic_metadata(message) == {}
+
+
+def test_extract_send_message_params_marks_topic_only_as_reply():
+    params = _extract_send_message_params(
+        chat_id="-1001",
+        message="hello",
+        reply_to_msg_id=None,
+        topic_id=77,
+        parse_mode=None,
+        files=None,
+    )
+    assert params["has_reply"] is True
+
+
+def test_extract_send_message_params_marks_no_reply_when_no_ids():
+    params = _extract_send_message_params(
+        chat_id="-1001",
+        message="hello",
+        reply_to_msg_id=None,
+        topic_id=None,
+        parse_mode=None,
+        files=None,
+    )
+    assert params["has_reply"] is False
 
 
 @pytest.mark.integration
