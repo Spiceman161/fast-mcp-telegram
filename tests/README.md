@@ -32,15 +32,12 @@ uv run pytest tests/test_forum_topics_minimal.py -v
 
 ## Optional live integration test (forum topics)
 
-There is one opt-in integration test:
-- `test_list_forum_topics_live_api_shape`
+Opt-in test: `test_list_forum_topics_live_api_shape`
 
-It is skipped by default. Enable with:
+Disabled by default. Run manually:
 
 ```bash
 FAST_MCP_TELEGRAM_LIVE_TESTS=1 \
 FAST_MCP_TELEGRAM_FORUM_CHAT_ID=<chat_id> \
 uv run pytest tests/test_forum_topics_minimal.py -m integration -v
 ```
-
-This verifies real Telegram API response shape for forum topics without making CI flaky.

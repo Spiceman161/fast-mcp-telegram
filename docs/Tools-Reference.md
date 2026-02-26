@@ -476,8 +476,8 @@ Counts are fetched via Telethon full-info requests and reflect current values.
 // Get details by username
 {"tool": "get_chat_info", "params": {"chat_id": "telegram"}}
 
-// Get channel information
-{"tool": "get_chat_info", "params": {"chat_id": "-1001234567890"}}
+// Get channel/user information
+{"tool": "get_chat_info", "params": {"chat_id": "telegram"}}
 
 // Get forum topics (returns up to 20 by default)
 {"tool": "get_chat_info", "params": {"chat_id": "-1001234567890"}}
