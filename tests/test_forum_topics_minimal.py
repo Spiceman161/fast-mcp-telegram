@@ -699,15 +699,38 @@ def test_extract_send_message_params_marks_no_reply_when_no_ids():
     assert params["has_reply"] is False
 
 
-@pytest.mark.integration
 @pytest.mark.asyncio
-async def test_list_forum_topics_live_api_shape():
-    """Optional live integration test (disabled by default).
+async def test_list_forum_topics_limit_100_underfilled_page_skips_probe_and_has_more_false():
+    entity = SimpleNamespace(id=999)
+    # Simulate backend returning less than requested page size.
+    topics = [SimpleNamespace(id=i, title=f"Topic {i}") for i in range(1, 100)]
+    client = AsyncMock(return_value=SimpleNamespace(topics=topics))
 
-    Enable with:
-      FAST_MCP_TELEGRAM_LIVE_TESTS=1
-      FAST_MCP_TELEGRAM_FORUM_CHAT_ID=<chat_id>
-    """
+    with patch("src.tools.contacts.get_connected_client", new=AsyncMock(return_value=client)):
+        result = await _list_forum_topics(entity, limit=100)
+
+    assert len(result["topics"]) == 99
+    assert result["has_more"] is False
+    # Only initial page request should be made (no probe request).
+    assert client.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_list_forum_topics_limit_100_missing_last_topic_id_disables_probe():
+    entity = SimpleNamespace(id=999)
+    topics = [SimpleNamespace(id=i, title=f"Topic {i}") for i in range(1, 100)]
+    topics.append(SimpleNamespace(id=None, title="Broken topic"))
+    client = AsyncMock(return_value=SimpleNamespace(topics=topics))
+
+    with patch("src.tools.contacts.get_connected_client", new=AsyncMock(return_value=client)):
+        result = await _list_forum_topics(entity, limit=100)
+
+    assert result["has_more"] is False
+    # Last topic id is None -> probe cannot run safely.
+    assert client.await_count == 1
+
+
+async def _get_live_forum_entity_or_skip():
     if os.getenv("FAST_MCP_TELEGRAM_LIVE_TESTS") != "1":
         pytest.skip("live integration disabled")
 
@@ -721,6 +744,14 @@ async def test_list_forum_topics_live_api_shape():
     if not entity:
         pytest.skip("forum entity not accessible")
 
+    return entity
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_forum_topics_live_api_shape():
+    entity = await _get_live_forum_entity_or_skip()
+
     result = await _list_forum_topics(entity, limit=5)
     assert isinstance(result, dict)
     assert "topics" in result
@@ -730,3 +761,33 @@ async def test_list_forum_topics_live_api_shape():
     for item in result["topics"]:
         assert "topic_id" in item
         assert "title" in item
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_forum_topics_live_limit_20_semantics():
+    """Live check: validates basic has_more semantics for limit=20."""
+    entity = await _get_live_forum_entity_or_skip()
+
+    result = await _list_forum_topics(entity, limit=20)
+    assert len(result["topics"]) <= 20
+    assert isinstance(result["has_more"], bool)
+
+    # If API returns fewer than limit topics, has_more should be false.
+    if len(result["topics"]) < 20:
+        assert result["has_more"] is False
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_list_forum_topics_live_limit_100_semantics():
+    """Live check for the boundary limit=100 path (probe-first implementation)."""
+    entity = await _get_live_forum_entity_or_skip()
+
+    result = await _list_forum_topics(entity, limit=100)
+    assert len(result["topics"]) <= 100
+    assert isinstance(result["has_more"], bool)
+
+    # If API returns fewer than limit topics, has_more should be false.
+    if len(result["topics"]) < 100:
+        assert result["has_more"] is False

@@ -30,9 +30,12 @@ Run only forum tests:
 uv run pytest tests/test_forum_topics_minimal.py -v
 ```
 
-## Optional live integration test (forum topics)
+## Optional live integration tests (forum topics)
 
-Opt-in test: `test_list_forum_topics_live_api_shape`
+Opt-in tests:
+- `test_list_forum_topics_live_api_shape`
+- `test_list_forum_topics_live_limit_20_semantics`
+- `test_list_forum_topics_live_limit_100_semantics`
 
 Disabled by default. Run manually:
 
@@ -41,3 +44,5 @@ FAST_MCP_TELEGRAM_LIVE_TESTS=1 \
 FAST_MCP_TELEGRAM_FORUM_CHAT_ID=<chat_id> \
 uv run pytest tests/test_forum_topics_minimal.py -m integration -v
 ```
+
+These tests validate real API shape and `has_more` behavior for `topics_limit=20` and `topics_limit=100`.
