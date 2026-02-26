@@ -216,7 +216,7 @@ async def _list_forum_topics(entity, limit: int = 20) -> dict[str, Any]:
         requested_limit = 20
     requested_limit = max(1, min(requested_limit, 100))
 
-    # Ask for one extra topic when possible to compute has_more reliably.
+    # Overfetch by one where possible. At API cap (100) we use a follow-up probe.
     fetch_limit = min(requested_limit + 1, 100)
 
     client = await get_connected_client()
@@ -233,13 +233,27 @@ async def _list_forum_topics(entity, limit: int = 20) -> dict[str, Any]:
     )
 
     raw_topics = getattr(result, "topics", []) or []
-    total_count = getattr(result, "count", None)
+    has_more = False
 
-    # Compute has_more first, then trim payload to requested_limit.
-    if isinstance(total_count, int):
-        has_more = total_count > requested_limit
-    else:
+    # Normal case: overfetch worked (requested_limit < 100).
+    if fetch_limit > requested_limit:
         has_more = len(raw_topics) > requested_limit
+    # Cap case: requested_limit == 100, cannot overfetch, do probe for next page.
+    elif len(raw_topics) >= requested_limit:
+        last_topic_id = getattr(raw_topics[-1], "id", None) if raw_topics else None
+        if last_topic_id is not None:
+            probe = await client(
+                GetForumTopicsRequest(
+                    peer=entity,
+                    offset_date=None,
+                    offset_id=0,
+                    offset_topic=last_topic_id,
+                    limit=1,
+                    q="",
+                )
+            )
+            probe_topics = getattr(probe, "topics", []) or []
+            has_more = len(probe_topics) > 0
 
     topics = []
     for topic in raw_topics[:requested_limit]:

@@ -496,16 +496,49 @@ async def test_list_forum_topics_limit_plus_one_has_more_true_and_trims_output()
 
 
 @pytest.mark.asyncio
-async def test_list_forum_topics_uses_count_when_available():
+async def test_list_forum_topics_limit_100_probes_next_page_and_sets_has_more_true():
     entity = SimpleNamespace(id=999)
-    topics = [SimpleNamespace(id=i, title=f"Topic {i}") for i in range(1, 21)]
-    # Telegram may return exactly 'limit' items with total count metadata.
-    client = AsyncMock(return_value=SimpleNamespace(topics=topics, count=55))
+    page_topics = [SimpleNamespace(id=i, title=f"Topic {i}") for i in range(1, 101)]
+
+    client = AsyncMock(
+        side_effect=[
+            SimpleNamespace(topics=page_topics),
+            SimpleNamespace(topics=[SimpleNamespace(id=101, title="Topic 101")]),
+        ]
+    )
 
     with patch("src.tools.contacts.get_connected_client", new=AsyncMock(return_value=client)):
-        result = await _list_forum_topics(entity, limit=20)
+        result = await _list_forum_topics(entity, limit=100)
 
+    assert len(result["topics"]) == 100
     assert result["has_more"] is True
+    assert client.await_count == 2
+
+    first_request = client.await_args_list[0].args[0]
+    second_request = client.await_args_list[1].args[0]
+    assert first_request.limit == 100
+    assert second_request.limit == 1
+    assert second_request.offset_topic == 100
+
+
+@pytest.mark.asyncio
+async def test_list_forum_topics_limit_100_probes_next_page_and_sets_has_more_false():
+    entity = SimpleNamespace(id=999)
+    page_topics = [SimpleNamespace(id=i, title=f"Topic {i}") for i in range(1, 101)]
+
+    client = AsyncMock(
+        side_effect=[
+            SimpleNamespace(topics=page_topics),
+            SimpleNamespace(topics=[]),
+        ]
+    )
+
+    with patch("src.tools.contacts.get_connected_client", new=AsyncMock(return_value=client)):
+        result = await _list_forum_topics(entity, limit=100)
+
+    assert len(result["topics"]) == 100
+    assert result["has_more"] is False
+    assert client.await_count == 2
 
 
 @pytest.mark.asyncio
