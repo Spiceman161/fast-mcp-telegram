@@ -151,8 +151,7 @@ def register_tools(mcp: FastMCP) -> None:
     async def send_message(
         chat_id: str,
         message: str,
-        reply_to_msg_id: int | None = None,
-        topic_id: int | None = None,
+        reply_to: int | None = None,
         parse_mode: Literal["markdown", "html", "auto"] | None = "auto",
         files: str | list[str] | None = None,
     ) -> dict:
@@ -173,8 +172,8 @@ def register_tools(mcp: FastMCP) -> None:
 
         EXAMPLES:
         send_message(chat_id="me", message="Hello!")  # Send text to Saved Messages
-        send_message(chat_id="-1001234567890", message="New message", reply_to_msg_id=12345)  # Reply
-        send_message(chat_id="-1001234567890", message="Topic message", topic_id=52)  # Post into forum topic
+        send_message(chat_id="-1001234567890", message="New message", reply_to=12345)  # Reply
+        send_message(chat_id="-1001234567890", message="Topic message", reply_to=52)  # Post into forum topic
         send_message(chat_id="me", message="Check this", files="https://example.com/doc.pdf")  # Send file from URL
         send_message(chat_id="me", message="Photos", files=["https://ex.com/1.jpg", "https://ex.com/2.jpg"])  # Multiple files
         send_message(chat_id="me", message="Report", files="/path/to/file.pdf")  # Local file (stdio mode only)
@@ -182,13 +181,12 @@ def register_tools(mcp: FastMCP) -> None:
         Args:
             chat_id: Target chat ID ('me' for Saved Messages, numeric ID, or username)
             message: Message text to send (becomes caption when files are provided)
-            reply_to_msg_id: Reply to specific message ID (optional)
-            topic_id: Forum topic root ID to post into (optional)
+            reply_to: Message ID to reply to. For forum chats, pass topic root message ID here.
             parse_mode: Text formatting ("markdown", "html", "auto", or None). Default: "auto"
             files: Single file or list of files to send (URLs or local paths, optional)
         """
         return await send_message_impl(
-            chat_id, message, reply_to_msg_id, topic_id, parse_mode, files
+            chat_id, message, reply_to, parse_mode, files
         )
 
     @mcp.tool(

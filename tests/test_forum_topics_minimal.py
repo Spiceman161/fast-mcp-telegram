@@ -235,7 +235,7 @@ async def test_get_chat_info_skips_topics_for_non_forum_chat():
 
 
 @pytest.mark.asyncio
-async def test_send_message_or_files_uses_topic_id_as_reply_target():
+async def test_send_message_or_files_uses_reply_to_target():
     client = AsyncMock()
     client.send_message = AsyncMock(return_value=SimpleNamespace(id=1))
     entity = SimpleNamespace(id=1)
@@ -245,8 +245,7 @@ async def test_send_message_or_files_uses_topic_id_as_reply_target():
         entity=entity,
         message="hello",
         files=None,
-        reply_to_msg_id=None,
-        topic_id=77,
+        reply_to_msg_id=77,
         parse_mode=None,
         operation="send_message",
         params={},
@@ -257,7 +256,7 @@ async def test_send_message_or_files_uses_topic_id_as_reply_target():
 
 
 @pytest.mark.asyncio
-async def test_send_message_or_files_prefers_reply_to_over_topic_id():
+async def test_send_message_or_files_without_reply_sends_plain_message():
     client = AsyncMock()
     client.send_message = AsyncMock(return_value=SimpleNamespace(id=1))
     entity = SimpleNamespace(id=1)
@@ -267,15 +266,14 @@ async def test_send_message_or_files_prefers_reply_to_over_topic_id():
         entity=entity,
         message="hello",
         files=None,
-        reply_to_msg_id=123,
-        topic_id=77,
+        reply_to_msg_id=None,
         parse_mode=None,
         operation="send_message",
         params={},
     )
 
     assert error is None
-    assert client.send_message.await_args.kwargs["reply_to"] == 123
+    assert client.send_message.await_args.kwargs["reply_to"] is None
 
 
 @pytest.mark.asyncio
@@ -321,8 +319,37 @@ async def test_edit_message_in_forum_includes_topic_id_only():
 
 
 @pytest.mark.asyncio
-async def test_send_message_or_files_files_with_topic_id():
-    """files non-empty, reply_to_msg_id=None, topic_id=123 → _send_files_to_entity called with correct reply_to."""
+async def test_send_message_or_files_files_with_reply_target():
+    """files non-empty with reply_to_msg_id -> _send_files_to_entity gets the same reply target."""
+    client = AsyncMock()
+    entity = SimpleNamespace(id=1)
+
+    with patch(
+        "src.tools.messages._validate_file_paths",
+        return_value=(["http://example.com/photo.jpg"], None),
+    ), patch(
+        "src.tools.messages._send_files_to_entity",
+        new=AsyncMock(return_value=SimpleNamespace(id=1)),
+    ) as send_files_mock:
+        error, _ = await _send_message_or_files(
+            client=client,
+            entity=entity,
+            message="hello",
+            files=["http://example.com/photo.jpg"],
+            reply_to_msg_id=123,
+            parse_mode=None,
+            operation="send_message",
+            params={},
+        )
+
+    assert error is None
+    send_files_mock.assert_awaited_once()
+    assert send_files_mock.await_args[0][4] == 123
+
+
+@pytest.mark.asyncio
+async def test_send_message_or_files_files_without_reply_target():
+    """files non-empty without reply target -> _send_files_to_entity gets None reply."""
     client = AsyncMock()
     entity = SimpleNamespace(id=1)
 
@@ -339,7 +366,6 @@ async def test_send_message_or_files_files_with_topic_id():
             message="hello",
             files=["http://example.com/photo.jpg"],
             reply_to_msg_id=None,
-            topic_id=123,
             parse_mode=None,
             operation="send_message",
             params={},
@@ -347,39 +373,7 @@ async def test_send_message_or_files_files_with_topic_id():
 
     assert error is None
     send_files_mock.assert_awaited_once()
-    # effective_reply_to should be topic_id since reply_to_msg_id is None
-    assert send_files_mock.await_args[0][4] == 123  # effective_reply_to positional arg
-
-
-@pytest.mark.asyncio
-async def test_send_message_or_files_files_reply_to_wins_over_topic_id():
-    """files non-empty, both reply_to_msg_id and topic_id set → reply_to_msg_id wins."""
-    client = AsyncMock()
-    entity = SimpleNamespace(id=1)
-
-    with patch(
-        "src.tools.messages._validate_file_paths",
-        return_value=(["http://example.com/photo.jpg"], None),
-    ), patch(
-        "src.tools.messages._send_files_to_entity",
-        new=AsyncMock(return_value=SimpleNamespace(id=1)),
-    ) as send_files_mock:
-        error, _ = await _send_message_or_files(
-            client=client,
-            entity=entity,
-            message="hello",
-            files=["http://example.com/photo.jpg"],
-            reply_to_msg_id=456,
-            topic_id=123,
-            parse_mode=None,
-            operation="send_message",
-            params={},
-        )
-
-    assert error is None
-    send_files_mock.assert_awaited_once()
-    # effective_reply_to should be reply_to_msg_id since it's not None
-    assert send_files_mock.await_args[0][4] == 456
+    assert send_files_mock.await_args[0][4] is None
 
 
 # --- 4c: edit_message_impl edge cases ---
@@ -675,12 +669,11 @@ def test_extract_topic_metadata_without_reply_data_returns_empty():
     assert _extract_topic_metadata(message) == {}
 
 
-def test_extract_send_message_params_marks_topic_only_as_reply():
+def test_extract_send_message_params_marks_reply_target_as_reply():
     params = _extract_send_message_params(
         chat_id="-1001",
         message="hello",
-        reply_to_msg_id=None,
-        topic_id=77,
+        reply_to_msg_id=77,
         parse_mode=None,
         files=None,
     )
@@ -692,7 +685,6 @@ def test_extract_send_message_params_marks_no_reply_when_no_ids():
         chat_id="-1001",
         message="hello",
         reply_to_msg_id=None,
-        topic_id=None,
         parse_mode=None,
         files=None,
     )

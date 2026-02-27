@@ -267,8 +267,7 @@ search_messages_in_chat(
 send_message(
   chat_id: str,                  // Target chat ID (see Supported Chat ID Formats above)
   message: str,                  // Message content (becomes caption when files sent)
-  reply_to_msg_id?: number,      // Reply to specific message (takes priority over topic_id)
-  topic_id?: number,             // Forum topic ID to post into (forum chats only)
+  reply_to?: number,             // Reply target ID (message ID or forum topic root ID)
   parse_mode?: 'markdown'|'html'|'auto' = 'auto', // Text formatting (auto-detect by default)
   files?: string | string[]      // File URL(s) or local path(s)
 )
@@ -317,14 +316,14 @@ send_message(
   "chat_id": "@username",
   "message": "*Important:* Meeting at 3 PM",
   "parse_mode": "markdown",
-  "reply_to_msg_id": 67890
+  "reply_to": 67890
 }}
 
-// Post into a forum topic (topic_id from get_chat_info topics list)
+// Post into a forum topic (use topic_id from get_chat_info topics list as reply_to)
 {"tool": "send_message", "params": {
   "chat_id": "-1001234567890",
   "message": "Hello forum thread!",
-  "topic_id": 52
+  "reply_to": 52
 }}
 ```
 

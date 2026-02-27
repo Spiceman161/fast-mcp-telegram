@@ -342,7 +342,6 @@ async def _send_message_or_files(
     message: str,
     files: str | list[str] | None,
     reply_to_msg_id: int | None,
-    topic_id: int | None,
     parse_mode: str | None,
     operation: str,
     params: dict[str, Any],
@@ -352,7 +351,7 @@ async def _send_message_or_files(
 
     Handles validation and routing to appropriate send method.
     """
-    effective_reply_to = reply_to_msg_id if reply_to_msg_id is not None else topic_id
+    effective_reply_to = reply_to_msg_id
 
     if files:
         # Validate and normalize files
@@ -380,20 +379,17 @@ def _extract_send_message_params(
     chat_id: str,
     message: str,
     reply_to_msg_id: int | None = None,
-    topic_id: int | None = None,
     parse_mode: str | None = None,
     files: str | list[str] | None = None,
 ) -> dict:
     """Extract params for send_message error handling."""
-    has_reply_target = (reply_to_msg_id is not None) or (topic_id is not None)
     return {
         "chat_id": chat_id,
         "message": message,
         "message_length": len(message),
         "reply_to_msg_id": reply_to_msg_id,
-        "topic_id": topic_id,
         "parse_mode": parse_mode,
-        "has_reply": has_reply_target,
+        "has_reply": reply_to_msg_id is not None,
         "has_files": bool(files),
         "file_count": _calculate_file_count(files),
     }
@@ -406,7 +402,6 @@ async def send_message_impl(
     chat_id: str,
     message: str,
     reply_to_msg_id: int | None = None,
-    topic_id: int | None = None,
     parse_mode: str | None = None,
     files: str | list[str] | None = None,
 ) -> dict[str, Any]:
@@ -416,8 +411,8 @@ async def send_message_impl(
     Args:
         chat_id: The ID of the chat to send the message to
         message: The text message to send (becomes caption when files are provided)
-        reply_to_msg_id: ID of the message to reply to
-        topic_id: Forum topic root ID to post into (for forum chats)
+        reply_to_msg_id: ID of the message to reply to. For forum chats,
+            pass the topic root message id here to post into a topic.
         parse_mode: Parse mode ('markdown' or 'html')
         files: Single file or list of files (URLs or local paths)
             - URLs work in all modes (http:// or https://)
@@ -433,7 +428,7 @@ async def send_message_impl(
     log_operation_start(
         "Sending message to chat",
         _extract_send_message_params(
-            chat_id, message, reply_to_msg_id, topic_id, parse_mode, files
+            chat_id, message, reply_to_msg_id, parse_mode, files
         ),
     )
 
@@ -444,7 +439,7 @@ async def send_message_impl(
             operation="send_message",
             error_message=f"Cannot find chat with ID '{chat_id}'",
             params=_extract_send_message_params(
-                chat_id, message, reply_to_msg_id, topic_id, parse_mode, files
+                chat_id, message, reply_to_msg_id, parse_mode, files
             ),
             exception=ValueError(
                 f"Cannot find any entity corresponding to '{chat_id}'"
@@ -458,11 +453,10 @@ async def send_message_impl(
         message,
         files,
         reply_to_msg_id,
-        topic_id,
         resolved_parse_mode,
         "send_message",
         _extract_send_message_params(
-            chat_id, message, reply_to_msg_id, topic_id, parse_mode, files
+            chat_id, message, reply_to_msg_id, parse_mode, files
         ),
     )
     if error:
@@ -802,7 +796,6 @@ async def send_message_to_phone_impl(
             message,
             files,
             reply_to_msg_id,
-            None,
             resolved_parse_mode,
             "send_message_to_phone",
             params,
